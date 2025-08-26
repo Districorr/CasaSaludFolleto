@@ -21,52 +21,61 @@ const searchTerm = ref('')
 const sortOrder = ref('nombre-asc')
 const activeCategory = ref('Todos')
 
-// --- PROPIEDADES COMPUTADAS ---
+// --- PROPIEDADES COMPUTADAS (VERSIÓN REFACTORIZADA Y ROBUSTA) ---
 
 const isExpired = computed(() => {
   if (!catalogo.value || !catalogo.value.fecha_caducidad) return false
   return new Date(catalogo.value.fecha_caducidad) < new Date()
 })
 
-const uniqueCategories = computed(() => {
-  if (!catalogo.value) return []
-  const allCategories = catalogo.value.catalogo_items
-    .filter(item => item.productos) // CORRECCIÓN: Ignora items cuyo producto fue borrado
-    .map(item => item.productos.categoria)
-  return ['Todos', ...new Set(allCategories.filter(Boolean))].sort()
-})
+// 1. Propiedad computada base para extraer los productos de forma segura
+const productosBase = computed(() => {
+  if (!catalogo.value || !catalogo.value.catalogo_items) {
+    return [];
+  }
+  // Aplanamos la lista y nos aseguramos de que solo incluimos productos válidos
+  return catalogo.value.catalogo_items
+    .filter(item => item.productos) // Ignora items si el producto asociado es null
+    .map(item => item.productos);
+});
 
+// 2. Genera categorías a partir de la lista base segura
+const uniqueCategories = computed(() => {
+  if (productosBase.value.length === 0) return ['Todos'];
+  const allCategories = productosBase.value.map(p => p.categoria);
+  return ['Todos', ...new Set(allCategories.filter(Boolean))].sort();
+});
+
+// 3. Filtra y ordena a partir de la lista base segura
 const filteredAndSortedProductos = computed(() => {
-  if (!catalogo.value) return []
-  let productos = catalogo.value.catalogo_items
-    .filter(item => item.productos) // CORRECCIÓN: Asegura que solo procesamos items con productos válidos
-    .map(item => item.productos)
+  let productos = [...productosBase.value];
 
   if (activeCategory.value !== 'Todos') {
-    productos = productos.filter(p => p.categoria === activeCategory.value)
+    productos = productos.filter(p => p.categoria === activeCategory.value);
   }
 
   if (searchTerm.value) {
-    const lowerCaseSearch = searchTerm.value.toLowerCase()
+    const lowerCaseSearch = searchTerm.value.toLowerCase();
     productos = productos.filter(p => 
       p.nombre.toLowerCase().includes(lowerCaseSearch) ||
       (p.codigo && p.codigo.toLowerCase().includes(lowerCaseSearch))
-    )
+    );
   }
 
   switch (sortOrder.value) {
     case 'nombre-asc':
-      productos.sort((a, b) => a.nombre.localeCompare(b.nombre))
-      break
+      productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      break;
     case 'precio-asc':
-      productos.sort((a, b) => a.precio - b.precio)
-      break
+      productos.sort((a, b) => a.precio - b.precio);
+      break;
     case 'precio-desc':
-      productos.sort((a, b) => b.precio - a.precio)
-      break
+      productos.sort((a, b) => b.precio - a.precio);
+      break;
   }
-  return productos
-})
+  return productos;
+});
+
 
 // --- FUNCIONES ---
 
