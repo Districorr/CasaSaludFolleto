@@ -210,7 +210,7 @@ onMounted(fetchCatalogo)
 </script>
 
 <template>
-  <!-- 1. SKELETON LOADER -->
+  <!-- 1. SKELETON LOADER (se muestra mientras loading es true) -->
   <div v-if="loading" class="p-8">
     <div class="animate-pulse space-y-4">
       <div class="h-16 bg-gray-200 rounded w-1/2 mx-auto"></div>
@@ -221,7 +221,7 @@ onMounted(fetchCatalogo)
     </div>
   </div>
 
-  <!-- 2. ESTADO DE ERROR -->
+  <!-- 2. ESTADO DE ERROR (se muestra si loading es false y error tiene un valor) -->
   <div v-else-if="error" class="flex items-center justify-center h-screen text-center">
     <div>
       <h1 class="text-2xl font-bold text-red-600">Error al Cargar</h1>
@@ -230,91 +230,94 @@ onMounted(fetchCatalogo)
     </div>
   </div>
 
-  <!-- 3. PANTALLA DE CATÁLOGO EXPIRADO -->
-  <div v-else-if="isExpired" class="flex items-center justify-center h-screen text-center p-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-800">Este catálogo ha expirado</h1>
-      <p class="text-gray-600 mt-2">Por favor, contacta a tu asesor de ventas para solicitar un catálogo actualizado.</p>
-    </div>
-  </div>
-
-  <!-- 4. CONTENIDO DEL CATÁLOGO ACTIVO -->
-  <div velse :style="{ backgroundColor: catalogo.color_fondo }" class="min-h-screen font-sans">
-    <ProductDetailModal
-      v-if="isModalOpen"
-      :producto="selectedProduct"
-      :color-primario="catalogo.color_primario"
-      @cerrar="isModalOpen = false"
-    />
-
-    <div class="no-print fixed bottom-24 right-5 z-50 flex flex-col gap-3">
-      <button @click="shareCatalogo" title="Compartir" class="p-3 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"></path></svg></button>
-      <button @click="generatePDF" title="Guardar como PDF" class="p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg></button>
+  <!-- 3. CONTENIDO PRINCIPAL (se muestra si loading es false, no hay error, Y 'catalogo' TIENE DATOS) -->
+  <div v-else-if="catalogo" class="main-content">
+    <!-- 3a. PANTALLA DE CATÁLOGO EXPIRADO -->
+    <div v-if="isExpired" class="flex items-center justify-center h-screen text-center p-4">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Este catálogo ha expirado</h1>
+        <p class="text-gray-600 mt-2">Por favor, contacta a tu asesor de ventas para solicitar un catálogo actualizado.</p>
+      </div>
     </div>
 
-    <div id="catalogo-imprimible">
-      <header class="p-8 text-center" :style="{ backgroundColor: catalogo.color_primario, color: '#FFFFFF' }">
-        <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">{{ catalogo.titulo }}</h1>
-        <p v-if="catalogo.nombre_cliente" class="mt-2 text-lg opacity-90">Preparado para: {{ catalogo.nombre_cliente }}</p>
-      </header>
+    <!-- 3b. CONTENIDO DEL CATÁLOGO ACTIVO -->
+    <div v-else :style="{ backgroundColor: catalogo.color_fondo }" class="min-h-screen font-sans">
+      <ProductDetailModal
+        v-if="isModalOpen"
+        :producto="selectedProduct"
+        :color-primario="catalogo.color_primario"
+        @cerrar="isModalOpen = false"
+      />
 
-      <nav class="no-print sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm p-4">
-        <div class="container mx-auto">
-          <div class="flex flex-col md:flex-row gap-4 items-center">
-            <input v-model="searchTerm" type="text" placeholder="Buscar en el catálogo..." class="w-full md:w-1/3 px-4 py-2 border rounded-full">
-            <select v-model="sortOrder" class="w-full md:w-auto px-4 py-2 border rounded-full">
-              <option value="nombre-asc">Ordenar por Nombre (A-Z)</option>
-              <option value="precio-asc">Ordenar por Precio (Menor a Mayor)</option>
-              <option value="precio-desc">Ordenar por Precio (Mayor a Menor)</option>
-            </select>
-          </div>
-          <div class="mt-4 flex flex-wrap gap-2 justify-center">
-            <button v-for="cat in uniqueCategories" :key="cat" @click="activeCategory = cat"
-              :class="[
-                'px-3 py-1 text-sm font-medium rounded-full transition-colors',
-                activeCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              ]">
-              {{ cat }}
-            </button>
-          </div>
-        </div>
-      </nav>
+      <div class="no-print fixed bottom-24 right-5 z-50 flex flex-col gap-3">
+        <button @click="shareCatalogo" title="Compartir" class="p-3 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"></path></svg></button>
+        <button @click="generatePDF" title="Guardar como PDF" class="p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg></button>
+      </div>
 
-      <main class="container mx-auto p-4 md:p-8">
-        <TransitionGroup name="list" tag="div" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          <div v-for="producto in filteredAndSortedProductos" :key="producto.id" 
-               class="product-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col group">
-            
-            <div class="relative overflow-hidden">
-              <img v-if="producto.producto_imagenes && producto.producto_imagenes.length > 0" :src="producto.producto_imagenes[0].imagen_url" :alt="producto.nombre"
-                   class="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110">
-              <div v-else class="w-full h-64 bg-gray-100 flex items-center justify-center text-gray-400">Sin imagen</div>
+      <div id="catalogo-imprimible">
+        <header class="p-8 text-center" :style="{ backgroundColor: catalogo.color_primario, color: '#FFFFFF' }">
+          <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">{{ catalogo.titulo }}</h1>
+          <p v-if="catalogo.nombre_cliente" class="mt-2 text-lg opacity-90">Preparado para: {{ catalogo.nombre_cliente }}</p>
+        </header>
+
+        <nav class="no-print sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm p-4">
+          <div class="container mx-auto">
+            <div class="flex flex-col md:flex-row gap-4 items-center">
+              <input v-model="searchTerm" type="text" placeholder="Buscar en el catálogo..." class="w-full md:w-1/3 px-4 py-2 border rounded-full">
+              <select v-model="sortOrder" class="w-full md:w-auto px-4 py-2 border rounded-full">
+                <option value="nombre-asc">Ordenar por Nombre (A-Z)</option>
+                <option value="precio-asc">Ordenar por Precio (Menor a Mayor)</option>
+                <option value="precio-desc">Ordenar por Precio (Mayor a Menor)</option>
+              </select>
             </div>
-            
-            <div class="p-6 flex-1 flex flex-col">
-              <h2 class="text-xl font-bold text-gray-800">{{ producto.nombre }}</h2>
-              <p class="text-gray-600 mt-4 flex-1 line-clamp-3">{{ producto.descripcion || 'Sin descripción disponible.' }}</p>
-              <div class="mt-6 flex justify-between items-center">
-                <span class="text-xl font-bold" :style="{ color: catalogo.color_primario }">
-                  {{ new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(producto.precio) }}
-                </span>
-                <button @click="openProductModal(producto)" class="px-4 py-2 text-sm font-semibold text-white rounded-md transition-transform hover:scale-105" :style="{ backgroundColor: catalogo.color_primario }">
-                  Ver Ficha
-                </button>
+            <div class="mt-4 flex flex-wrap gap-2 justify-center">
+              <button v-for="cat in uniqueCategories" :key="cat" @click="activeCategory = cat"
+                :class="[
+                  'px-3 py-1 text-sm font-medium rounded-full transition-colors',
+                  activeCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ]">
+                {{ cat }}
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        <main class="container mx-auto p-4 md:p-8">
+          <TransitionGroup name="list" tag="div" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div v-for="producto in filteredAndSortedProductos" :key="producto.id" 
+                 class="product-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col group">
+              
+              <div class="relative overflow-hidden">
+                <img v-if="producto.producto_imagenes && producto.producto_imagenes.length > 0" :src="producto.producto_imagenes[0].imagen_url" :alt="producto.nombre"
+                     class="w-full h-64 object-cover transition-transform duration-300 group-hover:scale-110">
+                <div v-else class="w-full h-64 bg-gray-100 flex items-center justify-center text-gray-400">Sin imagen</div>
+              </div>
+              
+              <div class="p-6 flex-1 flex flex-col">
+                <h2 class="text-xl font-bold text-gray-800">{{ producto.nombre }}</h2>
+                <p class="text-gray-600 mt-4 flex-1 line-clamp-3">{{ producto.descripcion || 'Sin descripción disponible.' }}</p>
+                <div class="mt-6 flex justify-between items-center">
+                  <span class="text-xl font-bold" :style="{ color: catalogo.color_primario }">
+                    {{ new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(producto.precio) }}
+                  </span>
+                  <button @click="openProductModal(producto)" class="px-4 py-2 text-sm font-semibold text-white rounded-md transition-transform hover:scale-105" :style="{ backgroundColor: catalogo.color_primario }">
+                    Ver Ficha
+                  </button>
+                </div>
               </div>
             </div>
+          </TransitionGroup>
+          <div v-if="filteredAndSortedProductos.length === 0" class="text-center py-16">
+            <h3 class="text-xl font-semibold">No se encontraron productos</h3>
+            <p class="text-gray-500 mt-2">Intenta ajustar tu búsqueda o filtros.</p>
           </div>
-        </TransitionGroup>
-        <div v-if="filteredAndSortedProductos.length === 0" class="text-center py-16">
-          <h3 class="text-xl font-semibold">No se encontraron productos</h3>
-          <p class="text-gray-500 mt-2">Intenta ajustar tu búsqueda o filtros.</p>
-        </div>
-      </main>
-    </div>
-    
-    <div class="no-print fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm shadow-lg p-3 flex justify-center items-center gap-4">
-      <span class="font-semibold">¿Necesitas ayuda?</span>
-      <a href="https://wa.me/5491123456789" target="_blank" class="px-4 py-2 text-white font-semibold rounded-full" :style="{ backgroundColor: catalogo.color_primario }">Contactar Asesor</a>
+        </main>
+      </div>
+      
+      <div class="no-print fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm shadow-lg p-3 flex justify-center items-center gap-4">
+        <span class="font-semibold">¿Necesitas ayuda?</span>
+        <a href="https://wa.me/5491123456789" target="_blank" class="px-4 py-2 text-white font-semibold rounded-full" :style="{ backgroundColor: catalogo.color_primario }">Contactar Asesor</a>
+      </div>
     </div>
   </div>
 </template>
