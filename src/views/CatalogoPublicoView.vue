@@ -21,32 +21,33 @@ const searchTerm = ref('')
 const sortOrder = ref('nombre-asc')
 const activeCategory = ref('Todos')
 
-// --- PROPIEDADES COMPUTADAS (VERSIÓN REFACTORIZADA Y ROBUSTA) ---
+// --- PROPIEDADES COMPUTADAS ---
 
 const isExpired = computed(() => {
   if (!catalogo.value || !catalogo.value.fecha_caducidad) return false
   return new Date(catalogo.value.fecha_caducidad) < new Date()
 })
 
-// 1. Propiedad computada base para extraer los productos de forma segura
 const productosBase = computed(() => {
   if (!catalogo.value || !catalogo.value.catalogo_items) {
     return [];
   }
-  // Aplanamos la lista y nos aseguramos de que solo incluimos productos válidos
-  return catalogo.value.catalogo_items
-    .filter(item => item.productos) // Ignora items si el producto asociado es null
+  const productos = catalogo.value.catalogo_items
+    .filter(item => item.productos)
     .map(item => item.productos);
+  
+  // --- LOG #2: VERIFICAR LA LISTA DE PRODUCTOS EXTRAÍDA ---
+  console.log('Log 2: Lista de productos extraída (productosBase):', productos);
+  
+  return productos;
 });
 
-// 2. Genera categorías a partir de la lista base segura
 const uniqueCategories = computed(() => {
   if (productosBase.value.length === 0) return ['Todos'];
   const allCategories = productosBase.value.map(p => p.categoria);
   return ['Todos', ...new Set(allCategories.filter(Boolean))].sort();
 });
 
-// 3. Filtra y ordena a partir de la lista base segura
 const filteredAndSortedProductos = computed(() => {
   let productos = [...productosBase.value];
 
@@ -73,6 +74,10 @@ const filteredAndSortedProductos = computed(() => {
       productos.sort((a, b) => b.precio - a.precio);
       break;
   }
+  
+  // --- LOG #3: VERIFICAR EL RESULTADO FINAL ANTES DE MOSTRAR ---
+  console.log('Log 3: Productos finales para mostrar (filteredAndSortedProductos):', productos);
+
   return productos;
 });
 
@@ -91,6 +96,13 @@ async function fetchCatalogo() {
 
     if (fetchError) throw fetchError
     if (!data) throw new Error('No se encontró el catálogo solicitado.')
+
+    // --- LOG #1: VER LOS DATOS CRUDOS DE SUPABASE ---
+    console.log('Log 1: Datos crudos recibidos de Supabase:', data);
+    if (data.catalogo_items && data.catalogo_items.length > 0) {
+      console.log('Log 1.1: Estructura del primer item.productos:', data.catalogo_items[0].productos);
+    }
+    
     catalogo.value = data
   } catch (e) {
     error.value = e.message
