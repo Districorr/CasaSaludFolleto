@@ -1,4 +1,4 @@
-<!-- src/views/CatalogoPublicoView.vue (Versión Final y Completa) -->
+<!-- src/views/CatalogoPublicoView.vue (Versión Final, Completa y Corregida) -->
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -23,22 +23,24 @@ const activeCategory = ref('Todos')
 
 // --- PROPIEDADES COMPUTADAS ---
 
-// Comprueba si el catálogo ha expirado
 const isExpired = computed(() => {
   if (!catalogo.value || !catalogo.value.fecha_caducidad) return false
-  // Compara la fecha de caducidad con la fecha y hora actual
   return new Date(catalogo.value.fecha_caducidad) < new Date()
 })
 
 const uniqueCategories = computed(() => {
   if (!catalogo.value) return []
-  const allCategories = catalogo.value.catalogo_items.map(item => item.productos.categoria)
+  const allCategories = catalogo.value.catalogo_items
+    .filter(item => item.productos) // CORRECCIÓN: Ignora items cuyo producto fue borrado
+    .map(item => item.productos.categoria)
   return ['Todos', ...new Set(allCategories.filter(Boolean))].sort()
 })
 
 const filteredAndSortedProductos = computed(() => {
   if (!catalogo.value) return []
-  let productos = catalogo.value.catalogo_items.map(item => item.productos)
+  let productos = catalogo.value.catalogo_items
+    .filter(item => item.productos) // CORRECCIÓN: Asegura que solo procesamos items con productos válidos
+    .map(item => item.productos)
 
   if (activeCategory.value !== 'Todos') {
     productos = productos.filter(p => p.categoria === activeCategory.value)
@@ -93,18 +95,24 @@ function openProductModal(producto) {
   isModalOpen.value = true
 }
 
-async function imageUrlToBase64(url) {
+async function getImageData(url) {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
+      reader.onloadend = () => {
+        const base64 = reader.result;
+        const img = new Image();
+        img.src = base64;
+        img.onload = () => resolve({ base64, width: img.width, height: img.height });
+        img.onerror = reject;
+      };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error("Error convirtiendo imagen a base64:", url, error);
+    console.error("Error obteniendo datos de la imagen:", url, error);
     return null;
   }
 }
@@ -115,7 +123,7 @@ async function generatePDF() {
 
   const promesasDeImagenes = productos.map(p => {
     if (p.producto_imagenes && p.producto_imagenes.length > 0) {
-      return imageUrlToBase64(p.producto_imagenes[0].imagen_url);
+      return getImageData(p.producto_imagenes[0].imagen_url);
     }
     return Promise.resolve(null);
   });
@@ -152,18 +160,16 @@ async function generatePDF() {
       if (data.section === 'body' && data.column.index === 0) {
         const imgData = imagenesData[data.row.index];
         if (imgData) {
-          const img = new Image();
-          img.src = imgData;
           const cell = data.cell;
           const cellPadding = 2;
           const maxWidth = cell.width - (cellPadding * 2);
           const maxHeight = cell.height - (cellPadding * 2);
-          const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
-          const imgWidth = img.width * ratio;
-          const imgHeight = img.height * ratio;
+          const ratio = Math.min(maxWidth / imgData.width, maxHeight / imgData.height);
+          const imgWidth = imgData.width * ratio;
+          const imgHeight = imgData.height * ratio;
           const x = cell.x + (cell.width - imgWidth) / 2;
           const y = cell.y + (cell.height - imgHeight) / 2;
-          doc.addImage(img, 'JPEG', x, y, imgWidth, imgHeight);
+          doc.addImage(imgData.base64, 'JPEG', x, y, imgWidth, imgHeight);
         }
       }
     },
@@ -233,7 +239,7 @@ onMounted(fetchCatalogo)
   </div>
 
   <!-- 4. CONTENIDO DEL CATÁLOGO ACTIVO -->
-  <div v-else :style="{ backgroundColor: catalogo.color_fondo }" class="min-h-screen font-sans">
+  <div velse :style="{ backgroundColor: catalogo.color_fondo }" class="min-h-screen font-sans">
     <ProductDetailModal
       v-if="isModalOpen"
       :producto="selectedProduct"
