@@ -20,7 +20,7 @@ function prevImage() {
 function cotizarPorWhatsApp() {
   const mensaje = encodeURIComponent(`¡Hola! Estoy interesado/a en el producto: ${props.producto.nombre} (Código: ${props.producto.codigo}). ¿Podrían darme más información?`)
   // Reemplaza 'NUMERO' con el número de WhatsApp de la empresa
-  const numeroWhatsApp = '5491123456789' 
+  const numeroWhatsApp = '5493704357985' 
   window.open(`https://wa.me/${numeroWhatsApp}?text=${mensaje}`, '_blank')
 }
 </script>
