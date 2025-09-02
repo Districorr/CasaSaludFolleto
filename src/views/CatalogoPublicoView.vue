@@ -337,7 +337,7 @@ onMounted(fetchCatalogo)
       
       <div class="no-print fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm shadow-lg p-3 flex justify-center items-center gap-4">
         <span class="font-semibold">¿Necesitas ayuda?</span>
-        <a href="https://wa.me/5491123456789" target="_blank" class="px-4 py-2 text-white font-semibold rounded-full" :style="{ backgroundColor: catalogo.color_primario }">Contactar Asesor</a>
+        <a href="https://wa.me/5493704357985" target="_blank" class="px-4 py-2 text-white font-semibold rounded-full" :style="{ backgroundColor: catalogo.color_primario }">Contactar Asesor</a>
       </div>
     </div>
   </div>
