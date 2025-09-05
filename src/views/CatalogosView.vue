@@ -1,4 +1,4 @@
-<!-- src/views/CatalogosView.vue (Versión Final y Completa) -->
+<!-- src/views/CatalogosView.vue (con función de Duplicar) -->
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
@@ -12,17 +12,13 @@ const loading = ref(true)
 const errorMessage = ref(null)
 const searchTerm = ref('')
 
-// --- ESTADO PARA ELIMINACIÓN ---
 const showDeleteModal = ref(false)
 const catalogoAEliminar = ref(null)
 
 const baseUrl = computed(() => window.location.origin)
 
-// Propiedad computada para filtrar los catálogos según la búsqueda
 const filteredCatalogos = computed(() => {
-  if (!searchTerm.value) {
-    return catalogos.value
-  }
+  if (!searchTerm.value) return catalogos.value
   const lowerCaseSearch = searchTerm.value.toLowerCase()
   return catalogos.value.filter(c =>
     c.titulo.toLowerCase().includes(lowerCaseSearch) ||
@@ -35,14 +31,11 @@ async function fetchCatalogos() {
     loading.value = true
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Usuario no autenticado.")
-
-    // Pedimos el catálogo y el conteo de sus productos asociados
     const { data, error } = await supabase
       .from('catalogos')
       .select('*, catalogo_items(count)')
       .eq('creado_por', user.id)
       .order('creado_en', { ascending: false })
-
     if (error) throw error
     catalogos.value = data
   } catch (error) {
@@ -56,8 +49,6 @@ function copiarLink(slug) {
   const link = `${baseUrl.value}/c/${slug}`
   navigator.clipboard.writeText(link).then(() => {
     showToast('¡Link copiado al portapapeles!', 'success')
-  }).catch(() => {
-    showToast('No se pudo copiar el link.', 'error')
   })
 }
 
@@ -69,13 +60,8 @@ function pedirConfirmacionEliminar(catalogo) {
 async function handleEliminarCatalogo() {
   if (!catalogoAEliminar.value) return
   try {
-    const { error } = await supabase
-      .from('catalogos')
-      .delete()
-      .eq('id', catalogoAEliminar.value.id)
-    
+    const { error } = await supabase.from('catalogos').delete().eq('id', catalogoAEliminar.value.id)
     if (error) throw error
-
     catalogos.value = catalogos.value.filter(c => c.id !== catalogoAEliminar.value.id)
     showToast('Catálogo eliminado con éxito.', 'success')
   } catch (error) {
@@ -86,10 +72,61 @@ async function handleEliminarCatalogo() {
   }
 }
 
+// --- NUEVA FUNCIÓN PARA DUPLICAR ---
+async function handleDuplicarCatalogo(catalogoOriginal) {
+  if (!confirm(`¿Seguro que quieres duplicar el catálogo "${catalogoOriginal.titulo}"?`)) return;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // 1. Obtenemos los IDs de los productos del catálogo original
+    const { data: itemsOriginales, error: itemsError } = await supabase
+      .from('catalogo_items')
+      .select('producto_id')
+      .eq('catalogo_id', catalogoOriginal.id);
+    if (itemsError) throw itemsError;
+
+    // 2. Preparamos los datos del nuevo catálogo
+    const nuevoTitulo = `${catalogoOriginal.titulo} (Copia)`;
+    const nuevoSlug = `${catalogoOriginal.slug}-copia-${Date.now()}`; // Slug único para evitar conflictos
+
+    // 3. Creamos el nuevo catálogo y obtenemos su ID
+    const { data: nuevoCatalogo, error: catalogoError } = await supabase
+      .from('catalogos')
+      .insert({
+        titulo: nuevoTitulo,
+        slug: nuevoSlug,
+        nombre_cliente: catalogoOriginal.nombre_cliente,
+        color_primario: catalogoOriginal.color_primario,
+        color_fondo: catalogoOriginal.color_fondo,
+        precios_ocultos: catalogoOriginal.precios_ocultos,
+        fecha_caducidad: catalogoOriginal.fecha_caducidad,
+        creado_por: user.id,
+      })
+      .select()
+      .single();
+    if (catalogoError) throw catalogoError;
+
+    // 4. Creamos los nuevos items para el catálogo duplicado
+    if (itemsOriginales.length > 0) {
+      const nuevosItems = itemsOriginales.map(item => ({
+        catalogo_id: nuevoCatalogo.id,
+        producto_id: item.producto_id,
+      }));
+      const { error: insertItemsError } = await supabase.from('catalogo_items').insert(nuevosItems);
+      if (insertItemsError) throw insertItemsError;
+    }
+
+    showToast('¡Catálogo duplicado con éxito!', 'success');
+    fetchCatalogos(); // Recargamos la lista para ver el nuevo catálogo
+
+  } catch (error) {
+    showToast('Error al duplicar el catálogo: ' + error.message, 'error');
+  }
+}
+
 function formatFecha(fecha) {
-  return new Date(fecha).toLocaleDateString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  })
+  return new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 onMounted(fetchCatalogos)
@@ -100,7 +137,7 @@ onMounted(fetchCatalogos)
     <ConfirmModal
       v-if="showDeleteModal"
       titulo="Eliminar Catálogo"
-      :mensaje="`¿Estás seguro de que quieres eliminar el catálogo '${catalogoAEliminar?.titulo}'? Esta acción no se puede deshacer.`"
+      :mensaje="`¿Estás seguro de que quieres eliminar el catálogo '${catalogoAEliminar?.titulo}'?`"
       @confirmar="handleEliminarCatalogo"
       @cancelar="showDeleteModal = false"
     />
@@ -117,12 +154,12 @@ onMounted(fetchCatalogos)
         v-model="searchTerm"
         type="text" 
         placeholder="Buscar por título o cliente..."
-        class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-md shadow-sm"
       >
     </div>
 
-    <div v-if="loading" class="text-center text-gray-500 py-10">Cargando catálogos...</div>
-    <div v-if="errorMessage" class="p-4 text-red-700 bg-red-100 rounded-md">{{ errorMessage }}</div>
+    <div v-if="loading" class="text-center text-gray-500 py-10">Cargando...</div>
+    <div v-if="errorMessage" class="p-4 text-red-100 text-red-700 rounded-md">{{ errorMessage }}</div>
 
     <div v-if="!loading && !errorMessage">
       <div v-if="catalogos.length > 0" class="overflow-x-auto bg-white rounded-lg shadow">
@@ -144,30 +181,25 @@ onMounted(fetchCatalogos)
               </td>
               <td class="px-6 py-4 whitespace-nowrap">{{ catalogo.nombre_cliente }}</td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span v-if="!catalogo.fecha_caducidad || new Date(catalogo.fecha_caducidad) > new Date()"
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                  Activo
-                </span>
-                <span v-else
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                  Expirado
-                </span>
+                <span v-if="!catalogo.fecha_caducidad || new Date(catalogo.fecha_caducidad) > new Date()" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
+                <span v-else class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Expirado</span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-center">{{ catalogo.catalogo_items[0].count }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatFecha(catalogo.creado_en) }}</td>
               <td class="px-6 py-4 text-right whitespace-nowrap text-sm font-medium">
-                <button @click="copiarLink(catalogo.slug)" class="text-indigo-600 hover:text-indigo-900" title="Copiar Link">Copiar</button>
+                <!-- NUEVO BOTÓN DE DUPLICAR -->
+                <button @click="handleDuplicarCatalogo(catalogo)" class="text-blue-600 hover:text-blue-900" title="Duplicar">Duplicar</button>
+                <button @click="copiarLink(catalogo.slug)" class="ml-4 text-indigo-600 hover:text-indigo-900" title="Copiar Link">Copiar</button>
                 <RouterLink :to="`/admin/catalogos/editar/${catalogo.id}`" class="ml-4 text-green-600 hover:text-green-900" title="Editar">Editar</RouterLink>
                 <button @click="pedirConfirmacionEliminar(catalogo)" class="ml-4 text-red-600 hover:text-red-900" title="Eliminar">Eliminar</button>
               </td>
             </tr>
             <tr v-if="filteredCatalogos.length === 0 && catalogos.length > 0">
-              <td colspan="6" class="px-6 py-4 text-center text-gray-500">No se encontraron catálogos que coincidan con tu búsqueda.</td>
+              <td colspan="6" class="px-6 py-4 text-center text-gray-500">No se encontraron catálogos que coincidan.</td>
             </tr>
           </tbody>
         </table>
       </div>
-      
       <div v-else class="text-center py-16 bg-white rounded-lg shadow">
         <h3 class="text-xl font-semibold text-gray-800">Aún no tienes catálogos</h3>
         <p class="mt-2 text-gray-500">¡Empieza a crear folletos personalizados para tus clientes!</p>

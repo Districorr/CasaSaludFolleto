@@ -1,4 +1,4 @@
-<!-- src/views/ProductosView.vue (Versión "Next Level") -->
+<!-- src/views/ProductosView.vue (Versión Mejorada y Completa) -->
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
@@ -9,7 +9,7 @@ import ConfirmModal from '../components/ConfirmModal.vue'
 const { showToast } = useToast()
 
 // --- ESTADO PRINCIPAL ---
-const todosLosProductos = ref([]) // La lista completa, sin filtrar
+const todosLosProductos = ref([])
 const loading = ref(true)
 const errorMessage = ref(null)
 
@@ -20,23 +20,19 @@ const filtroCategoria = ref('')
 
 // --- ESTADO PARA PAGINACIÓN ---
 const currentPage = ref(1)
-const itemsPerPage = ref(10) // Puedes ajustar este número
+const itemsPerPage = ref(10)
 
 // --- ESTADO PARA ELIMINACIÓN ---
 const showDeleteModal = ref(false)
 const productoAEliminar = ref(null)
 
-// --- PROPIEDADES COMPUTADAS (LA MAGIA) ---
+// --- PROPIEDADES COMPUTADAS ---
 
-// Genera listas únicas de marcas y categorías para los filtros
 const uniqueMarcas = computed(() => [...new Set(todosLosProductos.value.map(p => p.marca).filter(Boolean))].sort())
 const uniqueCategorias = computed(() => [...new Set(todosLosProductos.value.map(p => p.categoria).filter(Boolean))].sort())
 
-// Filtra los productos basándose en todos los criterios
 const filteredProductos = computed(() => {
   let productos = todosLosProductos.value
-
-  // 1. Filtro por búsqueda
   if (searchTerm.value) {
     const lowerCaseSearch = searchTerm.value.toLowerCase()
     productos = productos.filter(p =>
@@ -46,21 +42,17 @@ const filteredProductos = computed(() => {
       (p.categoria && p.categoria.toLowerCase().includes(lowerCaseSearch))
     )
   }
-  // 2. Filtro por marca
   if (filtroMarca.value) {
     productos = productos.filter(p => p.marca === filtroMarca.value)
   }
-  // 3. Filtro por categoría
   if (filtroCategoria.value) {
     productos = productos.filter(p => p.categoria === filtroCategoria.value)
   }
   return productos
 })
 
-// Calcula el número total de páginas
 const totalPages = computed(() => Math.ceil(filteredProductos.value.length / itemsPerPage.value))
 
-// Devuelve solo los productos para la página actual
 const paginatedProductos = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value
   const end = start + itemsPerPage.value
@@ -72,10 +64,14 @@ const paginatedProductos = computed(() => {
 async function fetchProductos() {
   try {
     loading.value = true
+    // Consulta mejorada: pedimos el producto y su primera imagen (ordenada por 'orden' o 'creado_en')
     const { data, error } = await supabase
       .from('productos')
-      .select('id, codigo, nombre, marca, categoria, precio')
-      .order('nombre', { ascending: true }) // Ordenar alfabéticamente por nombre
+      .select(`
+        id, codigo, nombre, marca, categoria, precio,
+        producto_imagenes ( imagen_url )
+      `)
+      .order('nombre', { ascending: true })
 
     if (error) throw error
     todosLosProductos.value = data
@@ -86,7 +82,7 @@ async function fetchProductos() {
   }
 }
 
-function formatCurrency(value) { /* ... (sin cambios) ... */
+function formatCurrency(value) {
   if (typeof value !== 'number') return '$ 0,00'
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value)
 }
@@ -99,6 +95,8 @@ function pedirConfirmacionEliminar(producto) {
 async function handleEliminarProducto() {
   if (!productoAEliminar.value) return
   try {
+    // La eliminación en cascada configurada en Supabase se encargará de borrar
+    // las entradas en 'producto_imagenes' y 'catalogo_items' automáticamente.
     const { error } = await supabase.from('productos').delete().eq('id', productoAEliminar.value.id)
     if (error) throw error
     
@@ -130,7 +128,7 @@ onMounted(fetchProductos)
     <ConfirmModal
       v-if="showDeleteModal"
       titulo="Eliminar Producto"
-      :mensaje="`¿Estás seguro de que quieres eliminar '${productoAEliminar?.nombre}'? Esta acción no se puede deshacer.`"
+      :mensaje="`¿Estás seguro de que quieres eliminar '${productoAEliminar?.nombre}'? Se quitará de todos los catálogos.`"
       @confirmar="handleEliminarProducto"
       @cancelar="showDeleteModal = false"
     />
@@ -163,17 +161,28 @@ onMounted(fetchProductos)
     <div v-if="!loading && !errorMessage" class="bg-white rounded-lg shadow">
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
-          <!-- ... (thead es igual que antes) ... -->
-          <thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th></tr></thead>
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Imagen</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+            </tr>
+          </thead>
           <tbody class="divide-y divide-gray-200">
             <tr v-if="paginatedProductos.length === 0">
               <td colspan="6" class="px-6 py-4 text-center text-gray-500">No se encontraron productos que coincidan con los filtros.</td>
             </tr>
             <tr v-for="producto in paginatedProductos" :key="producto.id">
+              <td class="px-6 py-4">
+                <img v-if="producto.producto_imagenes && producto.producto_imagenes.length > 0" :src="producto.producto_imagenes[0].imagen_url" class="h-12 w-12 object-cover rounded-md">
+                <div v-else class="h-12 w-12 bg-gray-200 rounded-md flex items-center justify-center text-xs text-gray-400">Sin img</div>
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ producto.codigo }}</td>
               <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{{ producto.nombre }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ producto.marca }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ producto.categoria }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{{ formatCurrency(producto.precio) }}</td>
               <td class="px-6 py-4 text-right whitespace-nowrap text-sm font-medium">
                 <RouterLink :to="`/admin/productos/editar/${producto.id}`" class="text-indigo-600 hover:text-indigo-900">Editar</RouterLink>

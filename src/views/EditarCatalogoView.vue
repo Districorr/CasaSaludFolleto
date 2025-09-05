@@ -1,6 +1,6 @@
-<!-- src/views/EditarCatalogoView.vue (Versión Final y Completa) -->
+<!-- src/views/EditarCatalogoView.vue (Versión Final, Completa y Corregida) -->
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '../lib/supabaseClient'
 import { useToast } from '../lib/useToast'
@@ -11,19 +11,17 @@ const router = useRouter()
 const { showToast } = useToast()
 
 const catalogo = ref(null)
-const productosSeleccionados = ref([]) // Array de IDs de productos
-const productosInfo = ref([]) // Array de objetos {id, nombre, codigo} para la previsualización
+const productosSeleccionados = ref([])
+const productosInfo = ref([])
 const isModalOpen = ref(false)
 const loading = ref(true)
 const saving = ref(false)
-const fechaCaducidadInput = ref('') // Modelo para el input de tipo 'date'
+const fechaCaducidadInput = ref('')
 
 const catalogoId = route.params.id
 
-// Función auxiliar para formatear la fecha para el input HTML
 function formatDateForInput(date) {
   if (!date) return ''
-  // new Date() maneja correctamente el formato ISO de Supabase
   const d = new Date(date)
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -31,11 +29,9 @@ function formatDateForInput(date) {
   return `${year}-${month}-${day}`
 }
 
-// Carga los datos iniciales del catálogo y sus productos asociados
 async function fetchCatalogo() {
   try {
     loading.value = true
-    // Pedimos el catálogo y la información básica de los productos que contiene
     const { data, error } = await supabase
       .from('catalogos')
       .select(`*, catalogo_items(productos(id, nombre, codigo))`)
@@ -44,12 +40,8 @@ async function fetchCatalogo() {
 
     if (error) throw error
     catalogo.value = data
-    
-    // Poblamos nuestros estados locales
     productosSeleccionados.value = data.catalogo_items.map(item => item.productos.id)
     productosInfo.value = data.catalogo_items.map(item => item.productos)
-    
-    // Formateamos la fecha de caducidad para mostrarla en el input
     fechaCaducidadInput.value = formatDateForInput(data.fecha_caducidad)
 
   } catch (error) {
@@ -62,7 +54,6 @@ async function fetchCatalogo() {
 
 onMounted(fetchCatalogo)
 
-// Cuando el modal de selección se guarda, actualizamos la previsualización
 async function handleGuardarSeleccion(nuevaSeleccionIds) {
   productosSeleccionados.value = nuevaSeleccionIds
   isModalOpen.value = false
@@ -83,21 +74,17 @@ async function handleGuardarSeleccion(nuevaSeleccionIds) {
   }
 }
 
-// Permite quitar un producto desde la lista de previsualización
 function quitarProducto(productoId) {
   productosSeleccionados.value = productosSeleccionados.value.filter(id => id !== productoId)
   productosInfo.value = productosInfo.value.filter(p => p.id !== productoId)
 }
 
-// Función principal para guardar todos los cambios
 async function handleActualizarCatalogo() {
   try {
     saving.value = true
     
-    // Convierte la fecha del input a un formato ISO para Supabase, o null si está vacío
     const fechaParaGuardar = fechaCaducidadInput.value ? new Date(fechaCaducidadInput.value).toISOString() : null
 
-    // 1. Actualizar los datos principales en la tabla 'catalogos'
     const { error: catalogoError } = await supabase
       .from('catalogos')
       .update({
@@ -106,15 +93,13 @@ async function handleActualizarCatalogo() {
         color_primario: catalogo.value.color_primario,
         color_fondo: catalogo.value.color_fondo,
         fecha_caducidad: fechaParaGuardar,
+        precios_ocultos: catalogo.value.precios_ocultos,
       })
       .eq('id', catalogoId)
     if (catalogoError) throw catalogoError
 
-    // 2. Sincronizar la tabla 'catalogo_items'
-    // Primero, borramos todas las entradas antiguas para este catálogo
     await supabase.from('catalogo_items').delete().eq('catalogo_id', catalogoId)
     
-    // Luego, si hay productos seleccionados, los volvemos a insertar
     if (productosSeleccionados.value.length > 0) {
       const itemsParaInsertar = productosSeleccionados.value.map(id => ({ catalogo_id: catalogoId, producto_id: id }))
       const { error: itemsError } = await supabase.from('catalogo_items').insert(itemsParaInsertar)
@@ -130,9 +115,6 @@ async function handleActualizarCatalogo() {
     saving.value = false
   }
 }
-
-// La función slugify y la propiedad computada slugComputado no son necesarias aquí
-// porque el slug se genera una sola vez al crear el catálogo y no debería cambiar.
 </script>
 
 <template>
@@ -151,7 +133,7 @@ async function handleActualizarCatalogo() {
     <form v-else-if="catalogo" @submit.prevent="handleActualizarCatalogo" class="space-y-8">
       <!-- Sección de Datos del Catálogo -->
       <div class="p-8 bg-white rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4">1. Datos del Catálogo</h2>
+        <h2 class="text-xl font-semibold mb-4">1. Datos y Personalización</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label for="titulo">Título del Catálogo</label>
@@ -174,12 +156,23 @@ async function handleActualizarCatalogo() {
             <input v-model="fechaCaducidadInput" type="date" id="fecha_caducidad">
             <p class="text-xs text-gray-500 mt-1">El catálogo se desactivará después de esta fecha. Déjalo en blanco para que nunca caduque.</p>
           </div>
+          <div class="md:col-span-2 flex items-center pt-4 border-t">
+            <input 
+              v-model="catalogo.precios_ocultos" 
+              type="checkbox" 
+              id="precios_ocultos" 
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            >
+            <label for="precios_ocultos" class="ml-3 block text-sm font-medium text-gray-900">
+              Ocultar todos los precios en este catálogo
+            </label>
+          </div>
         </div>
       </div>
 
       <!-- Sección de Selección de Productos -->
       <div class="p-8 bg-white rounded-lg shadow-md">
-        <h2 class="text-xl font-semibold mb-4">2. Seleccionar Productos</h2>
+        <h2 class="text-xl font-semibold mb-4">2. Productos Incluidos</h2>
         <div class="p-4 border border-gray-200 rounded-md flex items-center justify-between">
           <p class="text-gray-700">
             <span class="font-bold text-blue-600">{{ productosSeleccionados.length }}</span> productos seleccionados.

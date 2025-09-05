@@ -1,84 +1,97 @@
-<!-- src/views/CrearProductoView.vue -->
+<!-- src/views/CrearProductoView.vue (Versión Mejorada y Completa) -->
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabaseClient'
+import { useToast } from '../lib/useToast'
 
 const router = useRouter()
+const { showToast } = useToast()
+
+// Estado del formulario
 const producto = ref({
+  codigo: '',
   nombre: '',
   descripcion: '',
   precio: 0.00,
   marca: '',
   categoria: '',
-  imagen_url: null,
 })
-const imagenArchivo = ref(null)
-const imagenPreviewUrl = ref(null)
-const loading = ref(false)
-const errorMessage = ref(null)
-const successMessage = ref(null)
 
-// Función para manejar la selección de un archivo de imagen
+// Estado para el manejo de imágenes
+const archivosDeImagen = ref([]) // Almacena los objetos de archivo seleccionados
+const previewsDeImagen = ref([]) // Almacena las URLs locales para previsualización
+
+const saving = ref(false)
+
+// Maneja la selección de archivos de imagen
 function handleFileChange(event) {
-  const file = event.target.files[0]
-  if (!file) return
+  const files = Array.from(event.target.files)
+  if (!files.length) return
 
-  imagenArchivo.value = file
-  // Creamos una URL local para la previsualización
-  imagenPreviewUrl.value = URL.createObjectURL(file)
+  archivosDeImagen.value = files
+  
+  // Genera URLs de previsualización para cada archivo
+  previewsDeImagen.value = files.map(file => URL.createObjectURL(file))
 }
 
-// Función principal para guardar el producto
+// Función principal para crear el producto
 async function handleCrearProducto() {
   try {
-    loading.value = true
-    errorMessage.value = null
-    successMessage.value = null
-
+    saving.value = true
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("No se pudo identificar al usuario.")
 
-    // 1. Subir la imagen si existe
-    if (imagenArchivo.value) {
-      // Buena práctica: nombre de archivo único para evitar colisiones
-      const filePath = `${user.id}/${Date.now()}-${imagenArchivo.value.name}`
-      
-      const { error: uploadError } = await supabase.storage
-        .from('imagenes_productos')
-        .upload(filePath, imagenArchivo.value)
-
-      if (uploadError) throw uploadError
-
-      // Obtenemos la URL pública de la imagen subida
-      const { data: publicUrlData } = supabase.storage
-        .from('imagenes_productos')
-        .getPublicUrl(filePath)
-      
-      producto.value.imagen_url = publicUrlData.publicUrl
-    }
-
-    // 2. Insertar los datos del producto en la tabla
-    const { error: insertError } = await supabase
+    // --- PASO 1: Crear el registro del producto en la tabla 'productos' ---
+    // Usamos .select().single() para obtener el objeto del producto recién creado, incluido su ID.
+    const { data: nuevoProducto, error: insertError } = await supabase
       .from('productos')
       .insert({
         ...producto.value,
         creado_por: user.id,
       })
+      .select()
+      .single()
 
     if (insertError) throw insertError
 
-    successMessage.value = "¡Producto creado con éxito! Redirigiendo..."
-    
-    // Esperamos 2 segundos y redirigimos a la lista de productos
-    setTimeout(() => {
-      router.push('/admin/productos')
-    }, 2000)
+    // --- PASO 2: Si hay imágenes, subirlas y asociarlas al nuevo producto ---
+    if (archivosDeImagen.value.length > 0) {
+      const promesasDeSubida = archivosDeImagen.value.map(file => {
+        const filePath = `${user.id}/${nuevoProducto.id}/${Date.now()}-${file.name}`
+        return supabase.storage.from('imagenes_productos').upload(filePath, file)
+      })
+      
+      const resultados = await Promise.all(promesasDeSubida)
+      
+      const imagenesParaInsertar = []
+      for (const resultado of resultados) {
+        if (resultado.error) throw resultado.error
+        const { data: publicUrlData } = supabase.storage.from('imagenes_productos').getPublicUrl(resultado.data.path)
+        imagenesParaInsertar.push({
+          producto_id: nuevoProducto.id,
+          imagen_url: publicUrlData.publicUrl
+        })
+      }
+
+      if (imagenesParaInsertar.length > 0) {
+        const { error: insertImgError } = await supabase.from('producto_imagenes').insert(imagenesParaInsertar)
+        if (insertImgError) throw insertImgError
+      }
+    }
+
+    showToast("¡Producto creado con éxito!", 'success')
+    router.push('/admin/productos')
 
   } catch (error) {
-    errorMessage.value = 'Error: ' + error.message
+    // Manejo de errores de código duplicado
+    if (error.message.includes('duplicate key value violates unique constraint')) {
+      showToast('Error: El código/SKU que intentas usar ya existe.', 'error')
+    } else {
+      showToast('Error al crear el producto: ' + error.message, 'error')
+    }
   } finally {
-    loading.value = false
+    saving.value = false
   }
 }
 </script>
@@ -89,6 +102,13 @@ async function handleCrearProducto() {
 
     <form @submit.prevent="handleCrearProducto" class="p-8 bg-white rounded-lg shadow-md max-w-2xl">
       <div class="space-y-6">
+        <!-- Código / SKU -->
+        <div>
+          <label for="codigo" class="block text-sm font-medium text-gray-700">Código / SKU</label>
+          <input v-model="producto.codigo" type="text" id="codigo" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+          <p class="text-xs text-gray-500 mt-1">Este código debe ser único para cada producto.</p>
+        </div>
+
         <!-- Nombre -->
         <div>
           <label for="nombre" class="block text-sm font-medium text-gray-700">Nombre del Producto</label>
@@ -125,28 +145,26 @@ async function handleCrearProducto() {
           </div>
         </div>
 
-        <!-- Imagen -->
+        <!-- Imágenes -->
         <div>
-          <label class="block text-sm font-medium text-gray-700">Imagen del Producto</label>
-          <div class="mt-1 flex items-center gap-4">
-            <img v-if="imagenPreviewUrl" :src="imagenPreviewUrl" alt="Previsualización" class="h-20 w-20 object-cover rounded-md bg-gray-100">
-            <div v-else class="h-20 w-20 bg-gray-100 rounded-md flex items-center justify-center text-gray-400">Sin imagen</div>
-            <input @change="handleFileChange" type="file" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+          <label class="block text-sm font-medium text-gray-700">Imágenes del Producto</label>
+          <input @change="handleFileChange" type="file" accept="image/*" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+          
+          <!-- Previsualización de Imágenes -->
+          <div v-if="previewsDeImagen.length > 0" class="mt-4 grid grid-cols-3 gap-4">
+            <div v-for="(src, index) in previewsDeImagen" :key="index" class="relative">
+              <img :src="src" alt="Previsualización" class="h-24 w-full object-cover rounded-md">
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Mensajes y Botones -->
-      <div class="mt-8">
-        <div v-if="errorMessage" class="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-md">{{ errorMessage }}</div>
-        <div v-if="successMessage" class="mb-4 p-3 text-sm text-green-700 bg-green-100 rounded-md">{{ successMessage }}</div>
-        
-        <div class="flex justify-end gap-4">
-          <RouterLink to="/admin/productos" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</RouterLink>
-          <button type="submit" :disabled="loading" class="px-4 py-2 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300">
-            {{ loading ? 'Guardando...' : 'Guardar Producto' }}
-          </button>
-        </div>
+      <!-- Botones de Acción -->
+      <div class="mt-8 flex justify-end gap-4">
+        <RouterLink to="/admin/productos" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</RouterLink>
+        <button type="submit" :disabled="saving" class="px-4 py-2 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300">
+          {{ saving ? 'Guardando...' : 'Guardar Producto' }}
+        </button>
       </div>
     </form>
   </div>

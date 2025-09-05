@@ -1,18 +1,16 @@
-<!-- src/views/ImportarProductosView.vue (FINAL) -->
+<!-- src/views/ImportarProductosView.vue (Versión No Destructiva) -->
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabaseClient'
-import { useToast } from '../lib/useToast' // <-- Importar nuestro sistema de toasts
+import { useToast } from '../lib/useToast'
 import * as XLSX from 'xlsx'
-import ConfirmModal from '../components/ConfirmModal.vue' // <-- Importar el modal
 
 const router = useRouter()
 const { showToast } = useToast()
 const archivo = ref(null)
 const nombreArchivo = ref('')
 const loading = ref(false)
-const showConfirmModal = ref(false) // <-- Controla la visibilidad del modal
 
 function handleFileChange(event) {
   const file = event.target.files[0]
@@ -22,33 +20,17 @@ function handleFileChange(event) {
   }
 }
 
-// Paso 1: El usuario pide importar, mostramos el modal
-function pedirConfirmacion() {
+async function handleImportar() {
   if (!archivo.value) {
-    showToast("Por favor, selecciona un archivo primero.", 'error')
+    showToast("Por favor, selecciona un archivo para importar.", 'error')
     return
   }
-  showConfirmModal.value = true
-}
 
-// Paso 2: El usuario confirma en el modal, ejecutamos la importación
-async function handleImportar() {
-  showConfirmModal.value = false // Ocultamos el modal
   loading.value = true
 
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("No se pudo identificar al usuario.")
-
-    // --- LÓGICA DE SOBREESCRITURA ---
-    // 1. Borramos todos los productos existentes del usuario
-    const { error: deleteError } = await supabase
-      .from('productos')
-      .delete()
-      .eq('creado_por', user.id)
-    
-    if (deleteError) throw new Error('Error al borrar productos antiguos: ' + deleteError.message)
-    // ---------------------------------
 
     const reader = new FileReader()
     reader.onload = async (e) => {
@@ -59,16 +41,19 @@ async function handleImportar() {
         const worksheet = workbook.Sheets[firstSheetName]
         const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-        const filasValidas = jsonData.filter(row => row.DESCRIPCION && String(row.DESCRIPCION).trim() !== '')
-        if (filasValidas.length === 0) throw new Error("No se encontraron filas con una columna 'DESCRIPCION' válida.")
+        // Filtramos para asegurar que cada fila tenga un CÓDIGO. Es nuestra clave.
+        const filasValidas = jsonData.filter(row => row.CODIGO && String(row.CODIGO).trim() !== '')
+        if (filasValidas.length === 0) {
+          throw new Error("El archivo no contiene filas con una columna 'CODIGO' válida.")
+        }
 
-        const productosParaInsertar = filasValidas.map(row => {
-          // --- CORRECCIÓN DEL PRECIO AQUÍ ---
+        // Mapeamos los datos del Excel a la estructura de nuestra tabla.
+        // Crucial: NO incluimos ningún campo relacionado con imágenes.
+        const productosParaUpsert = filasValidas.map(row => {
           const precioStr = String(row.PRECIO || '0').replace(',', '.')
-          // ----------------------------------
           return {
-            codigo: String(row.CODIGO || ''),
-            nombre: String(row.DESCRIPCION).trim(),
+            codigo: String(row.CODIGO).trim(),
+            nombre: String(row.DESCRIPCION || '').trim(),
             precio: parseFloat(precioStr) || 0,
             marca: String(row.MARCA || '').trim(),
             categoria: String(row.CATEGORIA || '').trim(),
@@ -76,24 +61,25 @@ async function handleImportar() {
           }
         })
 
-        const { error: insertError } = await supabase.from('productos').insert(productosParaInsertar)
-        if (insertError) throw insertError
+        // LA MAGIA ESTÁ AQUÍ: Usamos .upsert()
+        // onConflict: 'creado_por,codigo' le dice a Supabase que la combinación de estas dos
+        // columnas es la clave única para decidir si actualizar o insertar.
+        const { error } = await supabase
+          .from('productos')
+          .upsert(productosParaUpsert, { onConflict: 'creado_por,codigo' })
 
-        showToast(`¡Éxito! Se importaron ${productosParaInsertar.length} productos.`, 'success')
+        if (error) throw error
+
+        showToast(`¡Éxito! Se procesaron ${productosParaUpsert.length} productos.`, 'success')
         setTimeout(() => router.push('/admin/productos'), 2000)
 
       } catch (processError) {
-        showToast(processError.message, 'error')
+        showToast('Error al procesar: ' + processError.message, 'error')
       } finally {
         loading.value = false
       }
     }
-    reader.onerror = () => {
-      showToast('Error al leer el archivo: ' + reader.error, 'error')
-      loading.value = false
-    }
     reader.readAsArrayBuffer(archivo.value)
-
   } catch (error) {
     showToast(error.message, 'error')
     loading.value = false
@@ -103,29 +89,21 @@ async function handleImportar() {
 
 <template>
   <div>
-    <!-- Nuestro Modal de Confirmación -->
-    <ConfirmModal
-      v-if="showConfirmModal"
-      titulo="Sobrescribir Productos"
-      mensaje="Esta acción eliminará TODOS tus productos actuales y los reemplazará con los del archivo Excel. ¿Estás seguro de que quieres continuar?"
-      @confirmar="handleImportar"
-      @cancelar="showConfirmModal = false"
-    />
-
-    <h1 class="text-3xl font-bold mb-6">Importar Productos desde Excel</h1>
+    <h1 class="text-3xl font-bold mb-6">Importar y Actualizar Productos</h1>
     <div class="p-8 bg-white rounded-lg shadow-md max-w-2xl">
-      <!-- ... (el resto del template es igual, no necesita cambios) ... -->
       <div class="mb-6">
         <h3 class="text-lg font-medium text-gray-900">Instrucciones</h3>
         <p class="mt-1 text-sm text-gray-600">
-          Sube un archivo .xlsx con las columnas:
-          <code class="bg-gray-200 text-gray-800 px-1 py-0.5 rounded">CODIGO</code>,
-          <code class="bg-gray-200 text-gray-800 px-1 py-0.5 rounded">DESCRIPCION</code>,
-          <code class="bg-gray-200 text-gray-800 px-1 py-0.5 rounded">PRECIO</code>,
-          <code class="bg-gray-200 text-gray-800 px-1 py-0.5 rounded">MARCA</code>,
-          <code class="bg-gray-200 text-gray-800 px-1 py-0.5 rounded">CATEGORIA</code>.
+          Sube un archivo .xlsx. La columna <code class="font-bold bg-gray-200 px-1 rounded">CODIGO</code> es obligatoria y se usará para identificar los productos.
         </p>
+        <ul class="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
+          <li>Si un código de producto ya existe en tu base de datos, se **actualizará** su información (nombre, precio, etc.).</li>
+          <li>Si un código no existe, se **creará** como un nuevo producto.</li>
+          <li class="font-semibold text-red-600">Las imágenes de los productos existentes NO se modificarán ni eliminarán.</li>
+        </ul>
       </div>
+
+      <!-- Área para subir archivo (sin cambios) -->
       <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
         <div class="space-y-1 text-center">
           <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -140,11 +118,12 @@ async function handleImportar() {
           <p v-if="nombreArchivo" class="pt-2 text-sm font-semibold text-green-700">{{ nombreArchivo }}</p>
         </div>
       </div>
+
+      <!-- Botones (sin cambios) -->
       <div class="mt-8 flex justify-end gap-4">
         <RouterLink to="/admin/productos" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</RouterLink>
-        <!-- El botón ahora llama a la confirmación -->
-        <button @click="pedirConfirmacion" :disabled="loading || !archivo" class="px-4 py-2 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-300">
-          {{ loading ? 'Importando...' : 'Iniciar Importación' }}
+        <button @click="handleImportar" :disabled="loading || !archivo" class="px-4 py-2 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 disabled:bg-green-300">
+          {{ loading ? 'Procesando...' : 'Procesar Archivo' }}
         </button>
       </div>
     </div>
