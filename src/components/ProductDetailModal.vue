@@ -78,14 +78,8 @@ watch(() => props.producto, () => {
 })
 
 function cotizarPorWhatsApp() {
-<<<<<<< HEAD
   const mensaje = encodeURIComponent(`¡Hola! Estoy interesado/a en el producto: ${props.producto.nombre} (Código: ${props.producto.codigo}).`)
   const numeroWhatsApp = '5493704357985'
-=======
-  const mensaje = encodeURIComponent(`¡Hola! Estoy interesado/a en el producto: ${props.producto.nombre} (Código: ${props.producto.codigo}). ¿Podrían darme más información?`)
-  // Reemplaza 'NUMERO' con el número de WhatsApp de la empresa
-  const numeroWhatsApp = '5493704357985' 
->>>>>>> 56ba369d023572bd1b7a9809421f4bf7b8d26096
   window.open(`https://wa.me/${numeroWhatsApp}?text=${mensaje}`, '_blank')
 }
 </script>
