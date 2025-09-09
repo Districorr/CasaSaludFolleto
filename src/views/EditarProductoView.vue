@@ -1,4 +1,4 @@
-<!-- src/views/EditarProductoView.vue (Versión con Puntos Clave y Badges) -->
+<!-- src/views/EditarProductoView.vue (Versión Final con Generación de Slug) -->
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -16,7 +16,7 @@ const nuevosArchivos = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const teniaCodigoInicialmente = ref(false)
-const badgesInput = ref('') // Modelo separado para el input de badges
+const badgesInput = ref('')
 
 const productoId = route.params.id
 
@@ -25,6 +25,20 @@ const imagenPrincipalUrl = computed(() => {
   if (imagenesActuales.value.length > 0) return imagenesActuales.value[0].imagen_url;
   return null;
 });
+
+// Función para crear slugs amigables para la URL
+function slugify(text) {
+  if (!text) return ''
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/--+/g, '-')
+}
 
 async function fetchProducto() {
   try {
@@ -39,7 +53,6 @@ async function fetchProducto() {
     producto.value = data
     imagenesActuales.value = data.producto_imagenes || []
     teniaCodigoInicialmente.value = !!data.codigo
-    // Convertimos el array de badges a un string para el input
     if (data.badges) {
       badgesInput.value = data.badges.join(', ')
     }
@@ -113,8 +126,13 @@ async function handleActualizarProducto() {
       }
     }
 
-    // Convertimos el string de badges a un array de strings, limpiando espacios
     const badgesParaGuardar = badgesInput.value.split(',').map(badge => badge.trim()).filter(badge => badge)
+    
+    // Lógica de generación de slug
+    let slugParaGuardar = producto.value.slug;
+    if (!slugParaGuardar) {
+      slugParaGuardar = slugify(producto.value.nombre);
+    }
 
     const { error: updateError } = await supabase
       .from('productos')
@@ -126,8 +144,9 @@ async function handleActualizarProducto() {
         marca: producto.value.marca,
         categoria: producto.value.categoria,
         video_youtube_url: producto.value.video_youtube_url,
-        puntos_clave: producto.value.puntos_clave, // <-- Guardamos los puntos clave
-        badges: badgesParaGuardar, // <-- Guardamos las badges
+        puntos_clave: producto.value.puntos_clave,
+        badges: badgesParaGuardar,
+        slug: slugParaGuardar,
       })
       .eq('id', productoId)
 
@@ -150,34 +169,37 @@ async function handleActualizarProducto() {
     <div v-if="loading" class="text-center py-10">Cargando datos del producto...</div>
     <div v-else-if="producto" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
       
-      <!-- Columna Izquierda: Formulario -->
       <div class="p-8 bg-white rounded-lg shadow-md">
         <form @submit.prevent="handleActualizarProducto">
           <div class="space-y-6">
-            <!-- Código, Nombre, Descripción, etc. -->
             <div>
               <label for="codigo" class="block text-sm font-medium text-gray-700">Código / SKU</label>
               <input v-model="producto.codigo" type="text" id="codigo" required :disabled="teniaCodigoInicialmente" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" :class="{ 'bg-gray-100 text-gray-500 cursor-not-allowed': teniaCodigoInicialmente }">
               <p v-if="!teniaCodigoInicialmente" class="text-xs text-green-600 mt-1">Este producto no tiene código. Por favor, asígnale uno único.</p>
               <p v-else class="text-xs text-gray-500 mt-1">El código no se puede modificar una vez asignado.</p>
             </div>
+
             <div>
               <label for="nombre" class="block text-sm font-medium text-gray-700">Nombre del Producto</label>
               <input v-model="producto.nombre" type="text" id="nombre" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
             </div>
+
+            <div>
+              <label for="slug" class="block text-sm font-medium text-gray-700">URL Amigable (Slug)</label>
+              <input :value="producto.slug || '(se generará al guardar)'" type="text" id="slug" disabled class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500">
+            </div>
+
             <div>
               <label for="descripcion" class="block text-sm font-medium text-gray-700">Descripción Larga</label>
               <textarea v-model="producto.descripcion" id="descripcion" rows="5" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></textarea>
             </div>
 
-            <!-- NUEVO: Puntos Clave -->
             <div>
               <label for="puntos_clave" class="block text-sm font-medium text-gray-700">Puntos Clave / Ficha Técnica</label>
               <textarea v-model="producto.puntos_clave" id="puntos_clave" rows="5" placeholder="Escribe cada punto en una nueva línea..." class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></textarea>
-              <p class="text-xs text-gray-500 mt-1">Cada línea se mostrará como un punto de viñeta en la ficha del producto.</p>
+              <p class="text-xs text-gray-500 mt-1">Cada línea se mostrará como un punto de viñeta.</p>
             </div>
 
-            <!-- Marca, Categoría, Precio -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label for="marca" class="block text-sm font-medium text-gray-700">Marca</label>
@@ -196,20 +218,17 @@ async function handleActualizarProducto() {
               </div>
             </div>
 
-            <!-- NUEVO: Badges -->
             <div>
               <label for="badges" class="block text-sm font-medium text-gray-700">Badges / Etiquetas</label>
               <input v-model="badgesInput" type="text" id="badges" placeholder="Nuevo, Promo, Envío 24hs" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
               <p class="text-xs text-gray-500 mt-1">Escribe las etiquetas separadas por comas.</p>
             </div>
 
-            <!-- Video de YouTube -->
             <div>
               <label for="video_youtube_url" class="block text-sm font-medium text-gray-700">URL de Video de YouTube (Opcional)</label>
               <input v-model="producto.video_youtube_url" type="text" id="video_youtube_url" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
             </div>
 
-            <!-- Gestión de Imágenes -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Imágenes del Producto</label>
               <div v-if="imagenesActuales.length > 0" class="grid grid-cols-3 gap-4 mb-4">
@@ -236,7 +255,6 @@ async function handleActualizarProducto() {
         </form>
       </div>
 
-      <!-- Columna Derecha: Previsualización -->
       <div class="hidden lg:block">
         <ProductCardPreview 
           :nombre="producto.nombre"

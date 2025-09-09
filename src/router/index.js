@@ -1,23 +1,33 @@
-// src/router/index.js (Versión Final y Completa)
+// src/router/index.js (Versión Final con Layout Público Consistente)
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '../lib/supabaseClient'
+import { useSiteConfig } from '../composables/useSiteConfig'
 
-// --- 1. IMPORTACIÓN DE TODOS LOS COMPONENTES DE VISTAS ---
-// Vistas Generales y Públicas
+// --- 1. IMPORTACIONES ---
+
+// Layouts Principales
+import PublicLayout from '../components/PublicLayout.vue'
+import AdminLayout from '../components/AdminLayout.vue'
+
+// Vistas Públicas (Sitio Principal)
+import HomeView from '../views/HomeView.vue'
+import NosotrosView from '../views/NosotrosView.vue'
+import ContactoView from '../views/ContactoView.vue'
+import CategoriasView from '../views/CategoriasView.vue'
+import ProductosPorCategoriaView from '../views/ProductosPorCategoriaView.vue'
+import ProductoDetalleView from '../views/ProductoDetalleView.vue'
+
+// Vistas "Standalone" (Sin Layout Común)
 import LoginView from '../views/LoginView.vue'
 import CatalogoPublicoView from '../views/CatalogoPublicoView.vue'
 
-// Layout del Panel de Administración
-import AdminLayout from '../components/AdminLayout.vue'
-
-// Vistas de Gestión de Productos
+// Vistas de Administración
+import ConfiguracionSitioView from '../views/ConfiguracionSitioView.vue'
 import ProductosView from '../views/ProductosView.vue'
 import CrearProductoView from '../views/CrearProductoView.vue'
 import EditarProductoView from '../views/EditarProductoView.vue'
 import ImportarProductosView from '../views/ImportarProductosView.vue'
-
-// Vistas de Gestión de Catálogos
 import CatalogosView from '../views/CatalogosView.vue'
 import CrearCatalogoView from '../views/CrearCatalogoView.vue'
 import EditarCatalogoView from '../views/EditarCatalogoView.vue'
@@ -27,32 +37,55 @@ import EditarCatalogoView from '../views/EditarCatalogoView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // Ruta raíz, redirige al login por defecto
+    // --- A) RUTAS DEL SITIO PÚBLICO (usan PublicLayout) ---
     {
       path: '/',
-      redirect: '/login'
+      component: PublicLayout,
+      beforeEnter: async (to, from, next) => {
+        const { config, fetchConfig } = useSiteConfig()
+        if (!config.value) {
+          await fetchConfig()
+        }
+        next()
+      },
+      children: [
+        { path: '', name: 'home', component: HomeView },
+        { path: 'nosotros', name: 'nosotros', component: NosotrosView },
+        { path: 'contacto', name: 'contacto', component: ContactoView },
+        { path: 'categorias', name: 'categorias', component: CategoriasView },
+        { 
+          path: 'categorias/:slug', 
+          name: 'productos-por-categoria', 
+          component: ProductosPorCategoriaView 
+        },
+        {
+          path: 'producto/:slug',
+          name: 'producto-detalle',
+          component: ProductoDetalleView
+        }
+      ]
     },
-    
-    // --- RUTAS PÚBLICAS (accesibles sin iniciar sesión) ---
+
+    // --- B) RUTAS INDEPENDIENTES (no usan un layout común) ---
     {
       path: '/login',
       name: 'login',
       component: LoginView
     },
     {
-      path: '/c/:slug', // Ruta dinámica para los catálogos públicos
+      path: '/c/:slug',
       name: 'catalogo-publico',
       component: CatalogoPublicoView
     },
 
-    // --- RUTAS PRIVADAS (requieren iniciar sesión) ---
+    // --- C) RUTAS DE ADMINISTRACIÓN (usan AdminLayout y están protegidas) ---
     {
       path: '/admin',
-      component: AdminLayout, // Usan el layout con el menú lateral
+      component: AdminLayout,
       children: [
-        // Redirección por defecto del panel de admin
         { path: '', redirect: '/admin/productos' },
-
+        { path: 'configuracion', name: 'admin-configuracion', component: ConfiguracionSitioView },
+        
         // Rutas de Productos
         { path: 'productos', name: 'admin-productos', component: ProductosView },
         { path: 'productos/nuevo', name: 'admin-productos-nuevo', component: CrearProductoView },
@@ -69,17 +102,13 @@ const router = createRouter({
 })
 
 
-// --- 3. GUARDIA DE NAVEGACIÓN GLOBAL (SEGURIDAD) ---
-// Este código se ejecuta antes de cada cambio de página.
+// --- 3. GUARDIA DE NAVEGACIÓN GLOBAL (SEGURIDAD DE SESIÓN) ---
 router.beforeEach(async (to, from, next) => {
   const { data: { session } } = await supabase.auth.getSession()
 
-  // Si el usuario intenta ir a una ruta que empieza con '/admin' Y no tiene una sesión activa...
   if (to.path.startsWith('/admin') && !session) {
-    // ...lo redirigimos a la página de login.
     next('/login')
   } else {
-    // En cualquier otro caso (va a una ruta pública, o va a /admin y SÍ tiene sesión), lo dejamos pasar.
     next()
   }
 })
