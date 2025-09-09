@@ -28,20 +28,16 @@ const formMap = {
 }
 
 function abrirModalEdicion(bloque) {
-  console.log("Abriendo modal para editar bloque:", bloque); // LOG
   bloqueAEditar.value = JSON.parse(JSON.stringify(bloque))
   formComponent.value = formMap[bloque.tipo]
   isModalOpen.value = true
 }
 
 function guardarEdicionBloque() {
-  console.log("Intentando guardar bloque editado:", bloqueAEditar.value); // LOG
   const index = config.value.home.bloques.findIndex(b => b.id === bloqueAEditar.value.id)
   if (index !== -1) {
     const bloqueOriginal = config.value.home.bloques[index];
-    // Fusión segura para no perder propiedades
     const bloqueGuardado = { ...bloqueOriginal, ...bloqueAEditar.value };
-    console.log("Bloque fusionado para guardar:", bloqueGuardado); // LOG
     config.value.home.bloques[index] = bloqueGuardado;
   }
   cerrarModal()
@@ -64,8 +60,7 @@ async function fetchConfiguracion() {
 
     if (error) throw error
     if (data) {
-      console.log("Configuración cargada desde Supabase:", data.config_json); // LOG
-      // Saneamiento inicial de datos
+      // Saneamiento de datos para asegurar que las propiedades existan
       if (data.config_json.home && Array.isArray(data.config_json.home.bloques)) {
         data.config_json.home.bloques = data.config_json.home.bloques.filter(b => b && typeof b === 'object');
       }
@@ -81,7 +76,6 @@ async function fetchConfiguracion() {
 onMounted(fetchConfiguracion)
 
 async function handleGuardar() {
-  console.log("Guardando configuración completa en Supabase:", config.value); // LOG
   if (!config.value) return
   try {
     saving.value = true
@@ -106,7 +100,7 @@ async function handleGuardar() {
 // --- Funciones para gestionar listas dinámicas ---
 function addNavItem() {
   if (!config.value.navegacion) config.value.navegacion = []
-  config.value.navegacion.push({ texto: 'Nuevo Enlace', url: '/' })
+  config.value.navegacion.push({ texto: 'Nuevo Enlace', url: '/', visible: true })
 }
 function removeNavItem(index) {
   config.value.navegacion.splice(index, 1)
@@ -143,7 +137,6 @@ function addBlock(tipo) {
     activo: true,
     ...newBlockData
   }
-  console.log("Añadiendo nuevo bloque:", newBlock); // LOG
   config.value.home.bloques.push(newBlock)
 }
 function removeBlock(id) {
@@ -211,10 +204,18 @@ function removeBlock(id) {
             <section class="border-t pt-6">
               <h2 class="text-xl font-semibold mb-4">Menú de Navegación Principal</h2>
               <div class="space-y-4">
-                <div v-for="(item, index) in config.navegacion" :key="index" class="flex items-center gap-4">
-                  <input type="text" v-model="item.texto" placeholder="Texto del enlace" class="form-input flex-1">
-                  <input type="text" v-model="item.url" placeholder="URL (ej: /contacto)" class="form-input flex-1">
-                  <button @click="removeNavItem(index)" class="text-red-500 font-semibold text-sm">Eliminar</button>
+                <div v-for="(item, index) in config.navegacion" :key="index" class="flex items-center gap-4 p-3 bg-gray-50 rounded-md">
+                  <div class="flex-1 grid grid-cols-2 gap-4">
+                    <input type="text" v-model="item.texto" placeholder="Texto del enlace" class="form-input">
+                    <input type="text" v-model="item.url" placeholder="URL (ej: /contacto)" class="form-input">
+                  </div>
+                  <div class="flex items-center gap-4">
+                    <div class="flex items-center">
+                      <input type="checkbox" v-model="item.visible" :id="`nav-visible-${index}`" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                      <label :for="`nav-visible-${index}`" class="ml-2 text-sm text-gray-600">Visible</label>
+                    </div>
+                    <button @click="removeNavItem(index)" class="text-red-500 font-semibold text-sm">Eliminar</button>
+                  </div>
                 </div>
                 <button @click="addNavItem" class="text-sm text-blue-600 font-semibold">+ Añadir enlace al menú</button>
               </div>

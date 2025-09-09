@@ -1,4 +1,4 @@
-// src/router/index.js (Versión Final con Layout Público Consistente)
+// src/router/index.js (Versión Restaurada y Funcional)
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { supabase } from '../lib/supabaseClient'
@@ -10,17 +10,17 @@ import { useSiteConfig } from '../composables/useSiteConfig'
 import PublicLayout from '../components/PublicLayout.vue'
 import AdminLayout from '../components/AdminLayout.vue'
 
-// Vistas Públicas (Sitio Principal)
+// Vistas Públicas (Sitio Principal y Catálogos)
 import HomeView from '../views/HomeView.vue'
 import NosotrosView from '../views/NosotrosView.vue'
 import ContactoView from '../views/ContactoView.vue'
 import CategoriasView from '../views/CategoriasView.vue'
 import ProductosPorCategoriaView from '../views/ProductosPorCategoriaView.vue'
 import ProductoDetalleView from '../views/ProductoDetalleView.vue'
-
-// Vistas "Standalone" (Sin Layout Común)
-import LoginView from '../views/LoginView.vue'
 import CatalogoPublicoView from '../views/CatalogoPublicoView.vue'
+
+// Vistas "Standalone"
+import LoginView from '../views/LoginView.vue'
 
 // Vistas de Administración
 import ConfiguracionSitioView from '../views/ConfiguracionSitioView.vue'
@@ -62,37 +62,33 @@ const router = createRouter({
           path: 'producto/:slug',
           name: 'producto-detalle',
           component: ProductoDetalleView
+        },
+        {
+          path: 'c/:slug',
+          name: 'catalogo-publico',
+          component: CatalogoPublicoView
         }
       ]
     },
 
-    // --- B) RUTAS INDEPENDIENTES (no usan un layout común) ---
+    // --- B) RUTA DE LOGIN (standalone) ---
     {
       path: '/login',
       name: 'login',
       component: LoginView
     },
-    {
-      path: '/c/:slug',
-      name: 'catalogo-publico',
-      component: CatalogoPublicoView
-    },
 
-    // --- C) RUTAS DE ADMINISTRACIÓN (usan AdminLayout y están protegidas) ---
+    // --- C) RUTAS DE ADMINISTRACIÓN (usan AdminLayout) ---
     {
       path: '/admin',
       component: AdminLayout,
       children: [
         { path: '', redirect: '/admin/productos' },
         { path: 'configuracion', name: 'admin-configuracion', component: ConfiguracionSitioView },
-        
-        // Rutas de Productos
         { path: 'productos', name: 'admin-productos', component: ProductosView },
         { path: 'productos/nuevo', name: 'admin-productos-nuevo', component: CrearProductoView },
         { path: 'productos/editar/:id', name: 'admin-productos-editar', component: EditarProductoView },
         { path: 'productos/importar', name: 'admin-productos-importar', component: ImportarProductosView },
-
-        // Rutas de Catálogos
         { path: 'catalogos', name: 'admin-catalogos', component: CatalogosView },
         { path: 'catalogos/nuevo', name: 'admin-catalogos-nuevo', component: CrearCatalogoView },
         { path: 'catalogos/editar/:id', name: 'admin-catalogos-editar', component: EditarCatalogoView }
@@ -102,10 +98,11 @@ const router = createRouter({
 })
 
 
-// --- 3. GUARDIA DE NAVEGACIÓN GLOBAL (SEGURIDAD DE SESIÓN) ---
+// --- 3. GUARDIA DE NAVEGACIÓN SIMPLE Y ORIGINAL ---
 router.beforeEach(async (to, from, next) => {
   const { data: { session } } = await supabase.auth.getSession()
 
+  // La única responsabilidad de esta guarda es proteger las rutas de admin.
   if (to.path.startsWith('/admin') && !session) {
     next('/login')
   } else {

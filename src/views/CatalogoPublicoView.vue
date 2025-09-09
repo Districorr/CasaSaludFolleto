@@ -8,10 +8,11 @@ import ProductGridView from '../components/ProductGridView.vue'
 import ProductListView from '../components/ProductListView.vue'
 import ProductDetailModal from '../components/ProductDetailModal.vue'
 import ListaCotizacionModal from '../components/ListaCotizacionModal.vue'
+import PaginationControls from '../components/PaginationControls.vue' // <-- 1. Importamos el nuevo componente
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
-// --- COMPOSABLES ---
+// 2. Obtenemos las nuevas propiedades y funciones del composable
 const {
   catalogo,
   loading,
@@ -19,7 +20,10 @@ const {
   isExpired,
   uniqueCategories,
   filteredAndSortedProductos,
-  productosBase,
+  paginatedProductos, // <-- La nueva lista que vamos a mostrar
+  currentPage,
+  totalPages,
+  goToPage,
   searchTerm,
   sortOrder,
   activeCategory,
@@ -28,7 +32,6 @@ const {
 
 const { totalProductos } = useListaCotizacion()
 
-// --- ESTADO LOCAL DE LA VISTA ---
 const isDetailModalOpen = ref(false)
 const isListaModalOpen = ref(false)
 const selectedProduct = ref(null)
@@ -38,7 +41,7 @@ function openProductModal(producto) {
   isDetailModalOpen.value = true
 }
 
-// --- FUNCIONES DE ACCIÓN ---
+// --- Las funciones de acción (generatePDF, shareCatalogo, etc.) no necesitan cambios ---
 
 async function getImageData(url) {
   try {
@@ -67,7 +70,8 @@ async function generatePDF() {
   showToast('Generando PDF, aguarda un momento...', 'info', 0)
   try {
     const doc = new jsPDF();
-    const productos = filteredAndSortedProductos.value;
+    // IMPORTANTE: El PDF debe generarse con la lista COMPLETA, no solo la página actual.
+    const productos = filteredAndSortedProductos.value; 
     const promesasDeImagenes = productos.map(p => {
       if (p.producto_imagenes && p.producto_imagenes.length > 0) {
         return getImageData(p.producto_imagenes[0].imagen_url);
@@ -202,21 +206,19 @@ async function shareCatalogo() {
 
       <div class="no-print fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
         <button v-if="totalProductos > 0" @click="isListaModalOpen = true"
-                class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 flex items-center gap-2 transition-transform hover:scale-105">
+                class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 flex items-center gap-2">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
           <span>Ver Lista ({{ totalProductos }})</span>
         </button>
-        
         <a :href="`https://wa.me/5493704357985?text=Hola,%20estoy%20viendo%20el%20catálogo%20'${catalogo.titulo}'%20y%20quisiera%20hacer%20una%20consulta.`" 
            target="_blank" 
-           class="px-4 py-2 bg-green-500 text-white font-semibold rounded-full shadow-lg hover:bg-green-600 flex items-center gap-2 transition-transform hover:scale-105"
-           title="Contactar Asesor por WhatsApp">
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.273-.099-.471-.148-.67.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.67-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.523.074-.797.372-.273.296-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"></path></svg>
+           class="px-4 py-2 bg-green-500 text-white font-semibold rounded-full shadow-lg hover:bg-green-600 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l..."></path></svg>
           <span>Contactar Asesor</span>
         </a>
         <div class="flex gap-3">
-          <button @click="shareCatalogo" title="Compartir" class="p-3 bg-gray-600 text-white rounded-full shadow-lg hover:bg-gray-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"></path></svg></button>
-          <button @click="generatePDF" title="Guardar como PDF" class="p-3 bg-gray-600 text-white rounded-full shadow-lg hover:bg-gray-700"><svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg></button>
+          <button @click="shareCatalogo" title="Compartir" class="p-3 bg-gray-600 text-white rounded-full shadow-lg hover:bg-gray-700">...</button>
+          <button @click="generatePDF" title="Guardar como PDF" class="p-3 bg-gray-600 text-white rounded-full shadow-lg hover:bg-gray-700">...</button>
         </div>
       </div>
 
@@ -234,22 +236,32 @@ async function shareCatalogo() {
       />
 
       <main class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <!-- === INICIO DE CAMBIOS === -->
         <ProductGridView 
           v-if="vistaActiva === 'grid'"
-          :productos="filteredAndSortedProductos"
+          :productos="paginatedProductos"
           :catalogo="catalogo"
           @ver-ficha="openProductModal"
         />
         <ProductListView
           v-if="vistaActiva === 'list'"
-          :productos="filteredAndSortedProductos"
+          :productos="paginatedProductos"
           :catalogo="catalogo"
           @ver-ficha="openProductModal"
         />
+
         <div v-if="filteredAndSortedProductos.length === 0" class="text-center py-16 col-span-full">
           <h3 class="text-xl font-semibold">No se encontraron productos</h3>
           <p class="text-gray-500 mt-2">Intenta ajustar tu búsqueda o filtros.</p>
         </div>
+
+        <!-- Controles de Paginación -->
+        <PaginationControls
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          @change-page="goToPage"
+        />
+        <!-- === FIN DE CAMBIOS === -->
       </main>
     </div>
   </div>
